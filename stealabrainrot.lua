@@ -1,3 +1,5 @@
+print("🚀 CLOUDY DEFENSE LOADING...")
+
 --// SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,9 +8,10 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
+print("👤 Local Player:", lp.DisplayName)
 
 --// SETTINGS
-local BASE_DISTANCE = 15
+local BASE_DISTANCE = 40  -- Increased to match the zone size from the other script
 local TP_DISTANCE = 60
 
 --// STATES
@@ -25,6 +28,7 @@ local scaleFactor = math.min(viewport.X / 1920, viewport.Y / 1080)
 
 --// FIND ADMIN REMOTE
 local function findAdminRemote()
+    print("🔍 Searching for admin remote...")
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") and v.Name:lower():find("352aad5") then
             print("✅ Found admin remote:", v:GetFullName())
@@ -36,34 +40,54 @@ local function findAdminRemote()
 end
 local NetRemote = findAdminRemote()
 
---// FIND BASE POSITIONS
-local basePositions = {}
-task.spawn(function()
-    task.wait(2)
-    local plots = Workspace:FindFirstChild("Plots")
-    if not plots then 
-        print("❌ Plots folder not found!")
-        return 
-    end
+--// FIND BASE (Using the same method as the protection script)
+local basePart = nil
+local function findBase()
+    print("🔍 Searching for base...")
+    local plots = Workspace:WaitForChild("Plots")
+    local name = lp.Name:lower()
+    local display = lp.DisplayName:lower()
 
-    for _, plot in ipairs(plots:GetChildren()) do
-        local sign = plot:FindFirstChild("PlotSign")
-        if sign and sign:FindFirstChild("SurfaceGui") then
-            local txt = sign.SurfaceGui.Frame.TextLabel
-            if txt and txt.Text:find(lp.DisplayName) then
-                local pods = plot:FindFirstChild("AnimalPodiums")
-                if pods then
-                    for _, m in ipairs(pods:GetChildren()) do
-                        if m:IsA("Model") then
-                            table.insert(basePositions, m:GetPivot().Position)
+    for _, base in ipairs(plots:GetChildren()) do
+        for _, d in ipairs(base:GetDescendants()) do
+            if d:IsA("TextLabel") then
+                local t = d.Text:lower()
+                if t:find(name, 1, true) or t:find(display, 1, true) then
+                    print("🏠 Found your plot!")
+                    local dec = base:FindFirstChild("Decorations")
+                    if dec and dec:FindFirstChild("Model") then
+                        for _, p in ipairs(dec.Model:GetChildren()) do
+                            if p:IsA("BasePart") then
+                                basePart = p
+                                print("✅ Found base part:", p:GetFullName())
+                                return p
+                            end
                         end
                     end
                 end
             end
         end
     end
-    print("✅ Found", #basePositions, "base positions")
+    print("❌ Base not found!")
+    return nil
+end
+
+task.spawn(function()
+    task.wait(2)
+    findBase()
 end)
+
+--// CHECK IF POSITION IS INSIDE BASE ZONE
+local function isInBaseZone(position)
+    if not basePart then return false end
+    
+    local localPos = basePart.CFrame:PointToObjectSpace(position)
+    local halfSize = Vector3.new(40, 40, 300) / 2  -- Same as protection script zone
+    
+    return math.abs(localPos.X) <= halfSize.X 
+        and math.abs(localPos.Y) <= halfSize.Y 
+        and math.abs(localPos.Z) <= halfSize.Z
+end
 
 --// HELPER FUNCTION: Check if player is stealing
 local function isPlayerStealing(plr)
@@ -75,8 +99,9 @@ local function isPlayerStealing(plr)
     if animator then
         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
             -- Check for the carrying/stealing animation
-            if track.Animation.AnimationId:find("71186871415348") then
-                print("🎯 Player", plr.DisplayName, "is stealing!")
+            local animId = track.Animation.AnimationId
+            if animId:find("71186871415348") then
+                print("🎯 Player", plr.DisplayName, "is stealing! AnimID:", animId)
                 return true
             end
         end
@@ -398,7 +423,7 @@ Instance.new("UICorner", autoKnob).CornerRadius = UDim.new(1, 0)
 
 autoSwitch.MouseButton1Click:Connect(function()
     autoDefenseEnabled = not autoDefenseEnabled
-    print("Auto Defense:", autoDefenseEnabled and "ON" or "OFF")
+    print("⚙️ Auto Defense:", autoDefenseEnabled and "ON ✅" or "OFF ❌")
     
     if autoDefenseEnabled then
         TweenService:Create(autoSwitch, TweenInfo.new(0.2), {
@@ -484,7 +509,7 @@ Instance.new("UICorner", antiKnob).CornerRadius = UDim.new(1, 0)
 
 antiSwitch.MouseButton1Click:Connect(function()
     antiTPEnabled = not antiTPEnabled
-    print("Anti TP:", antiTPEnabled and "ON" or "OFF")
+    print("⚙️ Anti TP:", antiTPEnabled and "ON ✅" or "OFF ❌")
     
     if antiTPEnabled then
         TweenService:Create(antiSwitch, TweenInfo.new(0.2), {
@@ -511,7 +536,12 @@ antiSwitch.MouseButton1Click:Connect(function()
     end
 end)
 
---// PLAYER LIST SECTION FRAME
+--// PLAYER LIST SECTION (continuing with the rest of the GUI code - let me know if you want me to paste the full player list section)
+
+-- [The full player list, discord label, dragging, and main loop code would continue here]
+-- I'll provide the complete main loop at the end:
+
+-- ... (rest of GUI code from previous version)
 local playerSection = Instance.new("Frame")
 playerSection.Size = UDim2.new(1, 0, 0, 100 * scaleFactor)
 playerSection.Position = UDim2.new(0, 0, 0, 82 * scaleFactor)
@@ -878,7 +908,7 @@ end
 
 --// MAIN LOOP
 RunService.Heartbeat:Connect(function()
-    if not NetRemote then return end
+    if not NetRemote or not basePart then return end
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
@@ -889,37 +919,26 @@ RunService.Heartbeat:Connect(function()
             local pos = root.Position
             local nearBase = false
 
-            -- AUTO DEFENSE CHECK - Only when player is stealing AND near base
-            if autoDefenseEnabled then
+            -- Check if player is in base zone
+            local inZone = isInBaseZone(pos)
+
+            -- AUTO DEFENSE CHECK - Only when player is stealing AND in base zone
+            if autoDefenseEnabled and inZone then
                 local isStealing = isPlayerStealing(plr)
                 if isStealing then
-                    print("📦 Player", plr.DisplayName, "is carrying something!")
-                    for _, bpos in ipairs(basePositions) do
-                        local dist = (pos - bpos).Magnitude
-                        if dist <= BASE_DISTANCE then
-                            print("🚨 AUTO DEFENSE TRIGGERED! Distance:", dist)
-                            fireAdmin(plr)
-                            nearBase = true
-                            break
-                        end
-                    end
+                    print("🚨 AUTO DEFENSE TRIGGERED! Player:", plr.DisplayName, "is stealing in your base!")
+                    fireAdmin(plr)
+                    nearBase = true
                 end
             end
 
             -- ANTI TP CHECK - Uses player selection
             if antiTPEnabled and lastPositions[plr] then
                 local tpDist = (pos - lastPositions[plr]).Magnitude
-                if tpDist >= TP_DISTANCE then
-                    print("⚡ TELEPORT DETECTED! Distance:", tpDist)
-                    for _, bpos in ipairs(basePositions) do
-                        local dist = (pos - bpos).Magnitude
-                        if dist <= BASE_DISTANCE then
-                            print("🚨 ANTI TP TRIGGERED! Distance:", dist)
-                            fireAdmin(plr)
-                            nearBase = true
-                            break
-                        end
-                    end
+                if tpDist >= TP_DISTANCE and inZone then
+                    print("🚨 ANTI TP TRIGGERED! Player:", plr.DisplayName, "teleported", tpDist, "studs into your base!")
+                    fireAdmin(plr)
+                    nearBase = true
                 end
             end
 
@@ -932,3 +951,5 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
+
+print("✅ CLOUDY DEFENSE LOADED SUCCESSFULLY!")
