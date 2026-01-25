@@ -14,11 +14,8 @@ local TP_DISTANCE = 60
 --// STATES
 local autoDefenseEnabled = false
 local antiTPEnabled = false
-local triggeredPlayers = {}
-local lastPositions = {}
 local selectedPlayers = {} -- Track which players are selected for defense
 local playerButtons = {} -- Store player button references
-local monitoredOverheads = {} -- Track overhead labels we're monitoring
 local playerStealing = {} -- Track which players are currently stealing
 
 --// SCALE FACTOR
@@ -60,179 +57,7 @@ task.spawn(function()
     end
 end)
 
---// BRAINROT STEAL TRACKING (doesn't fire admin, just tracks who is stealing)
-local playerStealing = {} -- Track which players are currently stealing
-
-local function setupStealDetection()
-    print("[DEBUG] Setting up steal detection...")
-    local debris = Workspace:FindFirstChild("Debris")
-    if not debris then
-        warn("[ERROR] Debris folder not found!")
-        return
-    end
-    print("[DEBUG] Found Debris folder")
-    
-    -- Monitor a single overhead billboard
-    local function checkOverhead(overhead)
-        -- Only check AnimalOverhead SurfaceGuis
-        if overhead.Name ~= "AnimalOverhead" then 
-            return 
-        end
-        
-        if not overhead:IsA("SurfaceGui") then
-            print("[DEBUG] Found AnimalOverhead but it's not a SurfaceGui, it's a:", overhead.ClassName)
-            return
-        end
-        
-        print("[DEBUG] Found AnimalOverhead SurfaceGui!")
-        
-        local stolen = overhead:FindFirstChild("Stolen")
-        if not stolen or not stolen:IsA("TextLabel") then 
-            print("[DEBUG] No Stolen TextLabel found in AnimalOverhead")
-            return
-        end
-        print("[DEBUG] Found Stolen TextLabel! Current visibility:", stolen.Visible)
-        
-        -- Monitor this stolen label
-        if not monitoredOverheads[stolen] then
-            monitoredOverheads[stolen] = true
-            print("[DEBUG] Now monitoring Stolen label for changes")
-            
-            -- Debug: print all properties of the stolen label
-            print("[DEBUG] Stolen label properties:")
-            print("  - Name:", stolen.Name)
-            print("  - ClassName:", stolen.ClassName)
-            print("  - Visible:", stolen.Visible)
-            print("  - Text:", stolen.Text)
-            print("  - Parent:", stolen.Parent.Name)
-            
-            -- Check visibility changes
-            stolen:GetPropertyChangedSignal("Visible"):Connect(function()
-                print("🔔 [ALERT] Stolen visibility changed to:", stolen.Visible)
-                
-                -- Find which player this overhead belongs to
-                local billboardParent = overhead.Adornee
-                if billboardParent then
-                    print("[DEBUG] Adornee found:", billboardParent:GetFullName())
-                    local character = billboardParent.Parent
-                    if character then
-                        print("[DEBUG] Character found:", character.Name)
-                        local player = Players:GetPlayerFromCharacter(character)
-                        if player then
-                            print("[DEBUG] Player identified:", player.DisplayName)
-                            if player ~= lp then
-                                if stolen.Visible then
-                                    -- Mark player as stealing
-                                    playerStealing[player] = true
-                                    print("✅ " .. player.DisplayName .. " is now STEALING brainrot!")
-                                else
-                                    -- Mark player as not stealing
-                                    playerStealing[player] = false
-                                    print("❌ " .. player.DisplayName .. " stopped stealing.")
-                                end
-                            else
-                                print("[DEBUG] This is the local player, ignoring")
-                            end
-                        else
-                            print("[DEBUG] Could not get player from character")
-                        end
-                    else
-                        print("[DEBUG] Adornee parent is not a character")
-                    end
-                else
-                    print("[DEBUG] No Adornee found on SurfaceGui")
-                end
-            end)
-            
-            -- Also monitor Text changes (in case visibility isn't what changes)
-            stolen:GetPropertyChangedSignal("Text"):Connect(function()
-                print("🔔 [ALERT] Stolen text changed to:", stolen.Text)
-            end)
-            
-            -- Also monitor TextTransparency changes
-            stolen:GetPropertyChangedSignal("TextTransparency"):Connect(function()
-                print("🔔 [ALERT] Stolen TextTransparency changed to:", stolen.TextTransparency)
-            end)
-            
-            -- Check initial state
-            task.spawn(function()
-                task.wait(0.1)
-                if stolen.Visible then
-                    print("[DEBUG] Stolen label is ALREADY visible on startup")
-                    local billboardParent = overhead.Adornee
-                    if billboardParent then
-                        local character = billboardParent.Parent
-                        if character then
-                            local player = Players:GetPlayerFromCharacter(character)
-                            if player and player ~= lp then
-                                playerStealing[player] = true
-                                print("✅ " .. player.DisplayName .. " is ALREADY stealing brainrot!")
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-    
-    -- Find ALL FastOverheadTemplate instances
-    local templatesFound = 0
-    for _, child in ipairs(debris:GetChildren()) do
-        if child.Name == "FastOverheadTemplate" then
-            templatesFound = templatesFound + 1
-            print("[DEBUG] Found FastOverheadTemplate #" .. templatesFound .. " with", #child:GetChildren(), "children")
-            
-            -- Check existing children
-            for _, overhead in ipairs(child:GetChildren()) do
-                checkOverhead(overhead)
-            end
-            
-            -- Monitor new overheads being added to THIS template
-            child.ChildAdded:Connect(function(overhead)
-                task.wait(0.1)
-                checkOverhead(overhead)
-            end)
-        end
-    end
-    
-    if templatesFound == 0 then
-        warn("[ERROR] No FastOverheadTemplate found in Debris!")
-        print("[DEBUG] Available children in Debris:")
-        for _, child in ipairs(debris:GetChildren()) do
-            print("  -", child.Name, child.ClassName)
-        end
-    else
-        print("[DEBUG] Total FastOverheadTemplate instances found:", templatesFound)
-        print("[DEBUG] Now monitoring for AnimalOverhead SurfaceGuis with Stolen labels...")
-    end
-    
-    -- Also monitor for NEW FastOverheadTemplate instances being added
-    debris.ChildAdded:Connect(function(child)
-        if child.Name == "FastOverheadTemplate" then
-            templatesFound = templatesFound + 1
-            print("[DEBUG] NEW FastOverheadTemplate #" .. templatesFound .. " added!")
-            
-            task.wait(0.1)
-            
-            for _, overhead in ipairs(child:GetChildren()) do
-                checkOverhead(overhead)
-            end
-            
-            child.ChildAdded:Connect(function(overhead)
-                task.wait(0.1)
-                checkOverhead(overhead)
-            end)
-        end
-    end)
-end
-
--- Setup steal detection after a delay
-task.spawn(function()
-    task.wait(3)
-    setupStealDetection()
-end)
-
---// CONTINUOUS STEAL CHECKING LOOP (RUNS ALWAYS, VERY FAST)
+--// BRAINROT STEAL DETECTION - CONTINUOUS LOOP (RUNS ALWAYS, VERY FAST)
 RunService.RenderStepped:Connect(function()
     -- Check all FastOverheadTemplate instances for Stolen labels
     local debris = Workspace:FindFirstChild("Debris")
@@ -1050,71 +875,81 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
---// FIRE ADMIN (ONCE)
-function fireAdmin(plr)
-    if triggeredPlayers[plr] then return end
-    triggeredPlayers[plr] = true
+--// AUTO-DEFENSE MONITORING (triggers when selected player steals)
+local lastDefenseTime = 0
+local defenseCooldown = 3
 
-    for _, cmd in ipairs({"balloon","inverse","rocket","tiny"}) do
-        NetRemote:FireServer(
-            "78a772b6-9e1c-4827-ab8b-04a07838f298",
-            plr,
-            cmd
-        )
-    end
-end
-
---// MAIN LOOP
-RunService.Heartbeat:Connect(function()
-    if not autoDefenseEnabled or not NetRemote then return end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            -- Only defend against selected players
-            if not selectedPlayers[plr.UserId] then continue end
-            
-            local root = plr.Character.HumanoidRootPart
-            local pos = root.Position
-            local nearBase = false
-
-            -- WALK-IN CHECK
-            for _, bpos in ipairs(basePositions) do
-                if (pos - bpos).Magnitude <= BASE_DISTANCE then
-                    nearBase = true
-                    
-                    -- Only fire admin if they're ALSO stealing
-                    if playerStealing[plr] then
-                        print("TRIGGERING ADMIN! " .. plr.DisplayName .. " is near base AND stealing!")
-                        fireAdmin(plr)
+task.spawn(function()
+    while true do
+        if autoDefenseEnabled and NetRemote then
+            -- Check if any selected player is stealing
+            for userId in pairs(selectedPlayers) do
+                local plr = Players:GetPlayerByUserId(userId)
+                if plr and plr.Parent == Players and playerStealing[plr] then
+                    if (tick() - lastDefenseTime) > defenseCooldown then
+                        print("🛡️ AUTO-DEFENSE TRIGGERED! " .. plr.DisplayName .. " is stealing!")
+                        
+                        -- Execute commands
+                        for _, cmd in ipairs({"balloon", "inverse", "rocket", "tiny"}) do
+                            NetRemote:FireServer("78a772b6-9e1c-4827-ab8b-04a07838f298", plr, cmd)
+                            task.wait(0.05)
+                        end
+                        
+                        lastDefenseTime = tick()
+                        playerStealing[plr] = false -- Reset so it doesn't spam
+                        break
                     end
-                    break
                 end
             end
+        end
+        
+        task.wait(0.05)
+    end
+end)
 
-            -- ANTI TP CHECK (ONLY IF ENABLED)
-            if antiTPEnabled and lastPositions[plr] then
-                if (pos - lastPositions[plr]).Magnitude >= TP_DISTANCE then
-                    for _, bpos in ipairs(basePositions) do
-                        if (pos - bpos).Magnitude <= BASE_DISTANCE then
-                            -- Only fire admin if they're ALSO stealing
-                            if playerStealing[plr] then
-                                print("ANTI-TP TRIGGERED! " .. plr.DisplayName .. " teleported AND is stealing!")
-                                fireAdmin(plr)
+--// ANTI-TP MONITORING (triggers when selected player is near base AND stealing)
+local antiTPLastDefenseTime = 0
+local antiTPCooldown = 3
+
+task.spawn(function()
+    while true do
+        if antiTPEnabled and NetRemote and #basePositions > 0 then
+            -- Check all selected players
+            for userId in pairs(selectedPlayers) do
+                local plr = Players:GetPlayerByUserId(userId)
+                if plr and plr ~= lp and plr.Character then
+                    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local playerPos = root.Position
+                        
+                        -- Check distance to each base position
+                        for _, basePos in ipairs(basePositions) do
+                            local distance = (playerPos - basePos).Magnitude
+                            if distance < BASE_DISTANCE then
+                                -- Player is near base, check if they're stealing
+                                if playerStealing[plr] then
+                                    if (tick() - antiTPLastDefenseTime) > antiTPCooldown then
+                                        print("🚨 ANTI-TP TRIGGERED! " .. plr.DisplayName .. " is near base AND stealing! Distance: " .. math.floor(distance))
+                                        
+                                        -- Execute commands on the player
+                                        for _, cmd in ipairs({"balloon", "inverse", "rocket", "tiny"}) do
+                                            NetRemote:FireServer("78a772b6-9e1c-4827-ab8b-04a07838f298", plr, cmd)
+                                            task.wait(0.05)
+                                        end
+                                        
+                                        antiTPLastDefenseTime = tick()
+                                        playerStealing[plr] = false -- Reset
+                                        break
+                                    end
+                                end
                             end
                         end
                     end
                 end
             end
-
-            lastPositions[plr] = pos
-
-            -- RESET AFTER LEAVING
-            if not nearBase then
-                triggeredPlayers[plr] = nil
-            end
         end
+        task.wait(0.1)
     end
 end)
 
 print("Cloudy Defense loaded! Now monitoring for base intrusions AND brainrot steals!")
-print("LEAK")
