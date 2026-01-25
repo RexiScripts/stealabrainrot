@@ -8,7 +8,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 --// SETTINGS
-local BASE_DISTANCE = 15
+local BASE_DISTANCE = 10
 local TP_DISTANCE = 60
 
 --// STATES
@@ -18,6 +18,7 @@ local triggeredPlayers = {}
 local lastPositions = {}
 local selectedPlayers = {} -- Track which players are selected for defense
 local playerButtons = {} -- Store player button references
+local monitoredOverheads = {} -- Track overhead labels we're monitoring
 
 --// SCALE FACTOR
 local viewport = workspace.CurrentCamera.ViewportSize
@@ -56,6 +57,89 @@ task.spawn(function()
             end
         end
     end
+end)
+
+--// BRAINROT STEAL DETECTION
+local function setupStealDetection()
+    local debris = Workspace:FindFirstChild("Debris")
+    if not debris then
+        warn("Debris folder not found!")
+        return
+    end
+    
+    -- Monitor existing overhead templates
+    local function checkOverhead(overhead)
+        if not overhead:IsA("BillboardGui") then return end
+        
+        local animalOverhead = overhead:FindFirstChild("AnimalOverhead")
+        if not animalOverhead then return end
+        
+        local stolen = animalOverhead:FindFirstChild("Stolen")
+        if not stolen or not stolen:IsA("TextLabel") then return end
+        
+        -- Monitor this stolen label
+        if not monitoredOverheads[stolen] then
+            monitoredOverheads[stolen] = true
+            
+            -- Check visibility changes
+            stolen:GetPropertyChangedSignal("Visible"):Connect(function()
+                if not autoDefenseEnabled then return end
+                
+                if stolen.Visible then
+                    -- Find which player this overhead belongs to
+                    local billboardParent = overhead.Adornee
+                    if billboardParent then
+                        -- The adornee should be a part of a player's character
+                        local character = billboardParent.Parent
+                        if character then
+                            local player = Players:GetPlayerFromCharacter(character)
+                            if player and player ~= lp and selectedPlayers[player.UserId] then
+                                print("BRAINROT STOLEN by " .. player.DisplayName .. "! Triggering defense...")
+                                fireAdmin(player)
+                            end
+                        end
+                    end
+                end
+            end)
+            
+            -- Also check if it's already visible when we start monitoring
+            if stolen.Visible and autoDefenseEnabled then
+                local billboardParent = overhead.Adornee
+                if billboardParent then
+                    local character = billboardParent.Parent
+                    if character then
+                        local player = Players:GetPlayerFromCharacter(character)
+                        if player and player ~= lp and selectedPlayers[player.UserId] then
+                            print("BRAINROT ALREADY STOLEN by " .. player.DisplayName .. "! Triggering defense...")
+                            fireAdmin(player)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Check all existing FastOverheadTemplate children
+    local fastTemplate = debris:FindFirstChild("FastOverheadTemplate")
+    if fastTemplate then
+        for _, overhead in ipairs(fastTemplate:GetChildren()) do
+            checkOverhead(overhead)
+        end
+        
+        -- Monitor new overheads being added
+        fastTemplate.ChildAdded:Connect(function(overhead)
+            task.wait(0.1) -- Small delay to ensure children are loaded
+            checkOverhead(overhead)
+        end)
+    else
+        warn("FastOverheadTemplate not found in Debris!")
+    end
+end
+
+-- Setup steal detection after a delay
+task.spawn(function()
+    task.wait(3)
+    setupStealDetection()
 end)
 
 --// GUI
@@ -831,7 +915,7 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
 end)
 
 --// FIRE ADMIN (ONCE)
-local function fireAdmin(plr)
+function fireAdmin(plr)
     if triggeredPlayers[plr] then return end
     triggeredPlayers[plr] = true
 
@@ -886,3 +970,5 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
+
+print("AZ SUM GEI!)
