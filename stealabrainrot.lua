@@ -96,11 +96,19 @@ local function setupStealDetection()
         -- Monitor this stolen label
         if not monitoredOverheads[stolen] then
             monitoredOverheads[stolen] = true
-            print("[DEBUG] Now monitoring Stolen label")
+            print("[DEBUG] Now monitoring Stolen label for changes")
+            
+            -- Debug: print all properties of the stolen label
+            print("[DEBUG] Stolen label properties:")
+            print("  - Name:", stolen.Name)
+            print("  - ClassName:", stolen.ClassName)
+            print("  - Visible:", stolen.Visible)
+            print("  - Text:", stolen.Text)
+            print("  - Parent:", stolen.Parent.Name)
             
             -- Check visibility changes
             stolen:GetPropertyChangedSignal("Visible"):Connect(function()
-                print("[DEBUG] Stolen visibility changed to:", stolen.Visible)
+                print("🔔 [ALERT] Stolen visibility changed to:", stolen.Visible)
                 
                 -- Find which player this overhead belongs to
                 local billboardParent = overhead.Adornee
@@ -122,12 +130,28 @@ local function setupStealDetection()
                                     playerStealing[player] = false
                                     print("❌ " .. player.DisplayName .. " stopped stealing.")
                                 end
+                            else
+                                print("[DEBUG] This is the local player, ignoring")
                             end
                         else
                             print("[DEBUG] Could not get player from character")
                         end
+                    else
+                        print("[DEBUG] Adornee parent is not a character")
                     end
+                else
+                    print("[DEBUG] No Adornee found on SurfaceGui")
                 end
+            end)
+            
+            -- Also monitor Text changes (in case visibility isn't what changes)
+            stolen:GetPropertyChangedSignal("Text"):Connect(function()
+                print("🔔 [ALERT] Stolen text changed to:", stolen.Text)
+            end)
+            
+            -- Also monitor TextTransparency changes
+            stolen:GetPropertyChangedSignal("TextTransparency"):Connect(function()
+                print("🔔 [ALERT] Stolen TextTransparency changed to:", stolen.TextTransparency)
             end)
             
             -- Check initial state
@@ -206,6 +230,52 @@ end
 task.spawn(function()
     task.wait(3)
     setupStealDetection()
+end)
+
+--// CONTINUOUS STEAL CHECKING LOOP (RUNS ALWAYS, VERY FAST)
+RunService.RenderStepped:Connect(function()
+    -- Check all FastOverheadTemplate instances for Stolen labels
+    local debris = Workspace:FindFirstChild("Debris")
+    if not debris then return end
+    
+    for _, template in ipairs(debris:GetChildren()) do
+        if template.Name == "FastOverheadTemplate" then
+            for _, overhead in ipairs(template:GetChildren()) do
+                if overhead.Name == "AnimalOverhead" and overhead:IsA("SurfaceGui") then
+                    local stolen = overhead:FindFirstChild("Stolen")
+                    if stolen and stolen:IsA("TextLabel") and stolen.Visible then
+                        -- Stolen label is visible! Find which player
+                        local adornee = overhead.Adornee
+                        if adornee then
+                            local character = adornee.Parent
+                            if character then
+                                local player = Players:GetPlayerFromCharacter(character)
+                                if player and player ~= lp then
+                                    -- Mark this player as stealing
+                                    if not playerStealing[player] then
+                                        playerStealing[player] = true
+                                        print("✅ " .. player.DisplayName .. " is now STEALING brainrot!")
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        -- Stolen label is NOT visible or doesn't exist
+                        if overhead.Adornee then
+                            local character = overhead.Adornee.Parent
+                            if character then
+                                local player = Players:GetPlayerFromCharacter(character)
+                                if player and player ~= lp and playerStealing[player] then
+                                    playerStealing[player] = false
+                                    print("❌ " .. player.DisplayName .. " stopped stealing.")
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
 end)
 
 --// GUI
@@ -1046,4 +1116,5 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-print("stana 3am pomosht")
+print("Cloudy Defense loaded! Now monitoring for base intrusions AND brainrot steals!")
+print("LEAK")
