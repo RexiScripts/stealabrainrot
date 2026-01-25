@@ -64,46 +64,67 @@ end)
 local playerStealing = {} -- Track which players are currently stealing
 
 local function setupStealDetection()
+    print("[DEBUG] Setting up steal detection...")
     local debris = Workspace:FindFirstChild("Debris")
     if not debris then
-        warn("Debris folder not found!")
+        warn("[ERROR] Debris folder not found!")
         return
     end
+    print("[DEBUG] Found Debris folder")
     
-    -- Monitor existing overhead templates
+    -- Monitor a single overhead billboard
     local function checkOverhead(overhead)
-        if not overhead:IsA("BillboardGui") then return end
+        -- Only check AnimalOverhead SurfaceGuis
+        if overhead.Name ~= "AnimalOverhead" then 
+            return 
+        end
         
-        local animalOverhead = overhead:FindFirstChild("AnimalOverhead")
-        if not animalOverhead then return end
+        if not overhead:IsA("SurfaceGui") then
+            print("[DEBUG] Found AnimalOverhead but it's not a SurfaceGui, it's a:", overhead.ClassName)
+            return
+        end
         
-        local stolen = animalOverhead:FindFirstChild("Stolen")
-        if not stolen or not stolen:IsA("TextLabel") then return end
+        print("[DEBUG] Found AnimalOverhead SurfaceGui!")
+        
+        local stolen = overhead:FindFirstChild("Stolen")
+        if not stolen or not stolen:IsA("TextLabel") then 
+            print("[DEBUG] No Stolen TextLabel found in AnimalOverhead")
+            return
+        end
+        print("[DEBUG] Found Stolen TextLabel! Current visibility:", stolen.Visible)
         
         -- Monitor this stolen label
         if not monitoredOverheads[stolen] then
             monitoredOverheads[stolen] = true
+            print("[DEBUG] Now monitoring Stolen label")
             
             -- Check visibility changes
             stolen:GetPropertyChangedSignal("Visible"):Connect(function()
-                if not autoDefenseEnabled then return end
+                print("[DEBUG] Stolen visibility changed to:", stolen.Visible)
                 
                 -- Find which player this overhead belongs to
                 local billboardParent = overhead.Adornee
                 if billboardParent then
+                    print("[DEBUG] Adornee found:", billboardParent:GetFullName())
                     local character = billboardParent.Parent
                     if character then
+                        print("[DEBUG] Character found:", character.Name)
                         local player = Players:GetPlayerFromCharacter(character)
-                        if player and player ~= lp and selectedPlayers[player.UserId] then
-                            if stolen.Visible then
-                                -- Mark player as stealing
-                                playerStealing[player] = true
-                                print(player.DisplayName .. " is now STEALING brainrot!")
-                            else
-                                -- Mark player as not stealing
-                                playerStealing[player] = false
-                                print(player.DisplayName .. " stopped stealing.")
+                        if player then
+                            print("[DEBUG] Player identified:", player.DisplayName)
+                            if player ~= lp then
+                                if stolen.Visible then
+                                    -- Mark player as stealing
+                                    playerStealing[player] = true
+                                    print("✅ " .. player.DisplayName .. " is now STEALING brainrot!")
+                                else
+                                    -- Mark player as not stealing
+                                    playerStealing[player] = false
+                                    print("❌ " .. player.DisplayName .. " stopped stealing.")
+                                end
                             end
+                        else
+                            print("[DEBUG] Could not get player from character")
                         end
                     end
                 end
@@ -112,15 +133,16 @@ local function setupStealDetection()
             -- Check initial state
             task.spawn(function()
                 task.wait(0.1)
-                if stolen.Visible and autoDefenseEnabled then
+                if stolen.Visible then
+                    print("[DEBUG] Stolen label is ALREADY visible on startup")
                     local billboardParent = overhead.Adornee
                     if billboardParent then
                         local character = billboardParent.Parent
                         if character then
                             local player = Players:GetPlayerFromCharacter(character)
-                            if player and player ~= lp and selectedPlayers[player.UserId] then
+                            if player and player ~= lp then
                                 playerStealing[player] = true
-                                print(player.DisplayName .. " is ALREADY stealing brainrot!")
+                                print("✅ " .. player.DisplayName .. " is ALREADY stealing brainrot!")
                             end
                         end
                     end
@@ -129,21 +151,55 @@ local function setupStealDetection()
         end
     end
     
-    -- Check all existing FastOverheadTemplate children
-    local fastTemplate = debris:FindFirstChild("FastOverheadTemplate")
-    if fastTemplate then
-        for _, overhead in ipairs(fastTemplate:GetChildren()) do
-            checkOverhead(overhead)
+    -- Find ALL FastOverheadTemplate instances
+    local templatesFound = 0
+    for _, child in ipairs(debris:GetChildren()) do
+        if child.Name == "FastOverheadTemplate" then
+            templatesFound = templatesFound + 1
+            print("[DEBUG] Found FastOverheadTemplate #" .. templatesFound .. " with", #child:GetChildren(), "children")
+            
+            -- Check existing children
+            for _, overhead in ipairs(child:GetChildren()) do
+                checkOverhead(overhead)
+            end
+            
+            -- Monitor new overheads being added to THIS template
+            child.ChildAdded:Connect(function(overhead)
+                task.wait(0.1)
+                checkOverhead(overhead)
+            end)
         end
-        
-        -- Monitor new overheads being added
-        fastTemplate.ChildAdded:Connect(function(overhead)
-            task.wait(0.1) -- Small delay to ensure children are loaded
-            checkOverhead(overhead)
-        end)
-    else
-        warn("FastOverheadTemplate not found in Debris!")
     end
+    
+    if templatesFound == 0 then
+        warn("[ERROR] No FastOverheadTemplate found in Debris!")
+        print("[DEBUG] Available children in Debris:")
+        for _, child in ipairs(debris:GetChildren()) do
+            print("  -", child.Name, child.ClassName)
+        end
+    else
+        print("[DEBUG] Total FastOverheadTemplate instances found:", templatesFound)
+        print("[DEBUG] Now monitoring for AnimalOverhead SurfaceGuis with Stolen labels...")
+    end
+    
+    -- Also monitor for NEW FastOverheadTemplate instances being added
+    debris.ChildAdded:Connect(function(child)
+        if child.Name == "FastOverheadTemplate" then
+            templatesFound = templatesFound + 1
+            print("[DEBUG] NEW FastOverheadTemplate #" .. templatesFound .. " added!")
+            
+            task.wait(0.1)
+            
+            for _, overhead in ipairs(child:GetChildren()) do
+                checkOverhead(overhead)
+            end
+            
+            child.ChildAdded:Connect(function(overhead)
+                task.wait(0.1)
+                checkOverhead(overhead)
+            end)
+        end
+    end)
 end
 
 -- Setup steal detection after a delay
@@ -989,4 +1045,5 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
-print("NOOB")
+
+print("stana 3am pomosht")
