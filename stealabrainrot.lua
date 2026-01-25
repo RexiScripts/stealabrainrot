@@ -19,6 +19,7 @@ local lastPositions = {}
 local selectedPlayers = {} -- Track which players are selected for defense
 local playerButtons = {} -- Store player button references
 local monitoredOverheads = {} -- Track overhead labels we're monitoring
+local playerStealing = {} -- Track which players are currently stealing
 
 --// SCALE FACTOR
 local viewport = workspace.CurrentCamera.ViewportSize
@@ -59,7 +60,9 @@ task.spawn(function()
     end
 end)
 
---// BRAINROT STEAL DETECTION
+--// BRAINROT STEAL TRACKING (doesn't fire admin, just tracks who is stealing)
+local playerStealing = {} -- Track which players are currently stealing
+
 local function setupStealDetection()
     local debris = Workspace:FindFirstChild("Debris")
     if not debris then
@@ -85,37 +88,44 @@ local function setupStealDetection()
             stolen:GetPropertyChangedSignal("Visible"):Connect(function()
                 if not autoDefenseEnabled then return end
                 
-                if stolen.Visible then
-                    -- Find which player this overhead belongs to
-                    local billboardParent = overhead.Adornee
-                    if billboardParent then
-                        -- The adornee should be a part of a player's character
-                        local character = billboardParent.Parent
-                        if character then
-                            local player = Players:GetPlayerFromCharacter(character)
-                            if player and player ~= lp and selectedPlayers[player.UserId] then
-                                print("BRAINROT STOLEN by " .. player.DisplayName .. "! Triggering defense...")
-                                fireAdmin(player)
-                            end
-                        end
-                    end
-                end
-            end)
-            
-            -- Also check if it's already visible when we start monitoring
-            if stolen.Visible and autoDefenseEnabled then
+                -- Find which player this overhead belongs to
                 local billboardParent = overhead.Adornee
                 if billboardParent then
                     local character = billboardParent.Parent
                     if character then
                         local player = Players:GetPlayerFromCharacter(character)
                         if player and player ~= lp and selectedPlayers[player.UserId] then
-                            print("BRAINROT ALREADY STOLEN by " .. player.DisplayName .. "! Triggering defense...")
-                            fireAdmin(player)
+                            if stolen.Visible then
+                                -- Mark player as stealing
+                                playerStealing[player] = true
+                                print(player.DisplayName .. " is now STEALING brainrot!")
+                            else
+                                -- Mark player as not stealing
+                                playerStealing[player] = false
+                                print(player.DisplayName .. " stopped stealing.")
+                            end
                         end
                     end
                 end
-            end
+            end)
+            
+            -- Check initial state
+            task.spawn(function()
+                task.wait(0.1)
+                if stolen.Visible and autoDefenseEnabled then
+                    local billboardParent = overhead.Adornee
+                    if billboardParent then
+                        local character = billboardParent.Parent
+                        if character then
+                            local player = Players:GetPlayerFromCharacter(character)
+                            if player and player ~= lp and selectedPlayers[player.UserId] then
+                                playerStealing[player] = true
+                                print(player.DisplayName .. " is ALREADY stealing brainrot!")
+                            end
+                        end
+                    end
+                end
+            end)
         end
     end
     
@@ -944,8 +954,13 @@ RunService.Heartbeat:Connect(function()
             -- WALK-IN CHECK
             for _, bpos in ipairs(basePositions) do
                 if (pos - bpos).Magnitude <= BASE_DISTANCE then
-                    fireAdmin(plr)
                     nearBase = true
+                    
+                    -- Only fire admin if they're ALSO stealing
+                    if playerStealing[plr] then
+                        print("TRIGGERING ADMIN! " .. plr.DisplayName .. " is near base AND stealing!")
+                        fireAdmin(plr)
+                    end
                     break
                 end
             end
@@ -955,7 +970,11 @@ RunService.Heartbeat:Connect(function()
                 if (pos - lastPositions[plr]).Magnitude >= TP_DISTANCE then
                     for _, bpos in ipairs(basePositions) do
                         if (pos - bpos).Magnitude <= BASE_DISTANCE then
-                            fireAdmin(plr)
+                            -- Only fire admin if they're ALSO stealing
+                            if playerStealing[plr] then
+                                print("ANTI-TP TRIGGERED! " .. plr.DisplayName .. " teleported AND is stealing!")
+                                fireAdmin(plr)
+                            end
                         end
                     end
                 end
@@ -970,5 +989,4 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
-
-print("AZ SUM GEI!")
+print("NOOB")
