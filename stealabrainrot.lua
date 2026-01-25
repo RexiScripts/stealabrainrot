@@ -971,4 +971,4 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-print("AZ SUM GEI!)
+print("AZ SUM GEI!")
