@@ -1733,9 +1733,9 @@ _G.setAutoRightVisual = VisualSetters.AutoRightEnabled
 local SaveBtn = Instance.new("TextButton", rightSide)
 SaveBtn.Size = UDim2.new(1, -10 * guiScale, 0, 50 * guiScale)
 SaveBtn.Position = UDim2.new(0, 5 * guiScale, 0, 503 * guiScale)
-SaveBtn.BackgroundColor3 = C.purple
+SaveBtn.BackgroundColor3 = C.WHITE
 SaveBtn.Text = "SAVE CONFIG"
-SaveBtn.TextColor3 = Color3.new(1, 1, 1)
+SaveBtn.TextColor3 = Color3.new(0, 0, 0)
 SaveBtn.Font = Enum.Font.GothamBold
 SaveBtn.TextSize = 15 * guiScale
 SaveBtn.ZIndex = 3
@@ -1752,7 +1752,7 @@ SaveBtn.MouseButton1Click:Connect(function()
     end
     task.delay(1.5, function()
         SaveBtn.Text = "SAVE CONFIG"
-        SaveBtn.BackgroundColor3 = C.purple
+        SaveBtn.BackgroundColor3 = C.WHITE
     end)
 end)
 
