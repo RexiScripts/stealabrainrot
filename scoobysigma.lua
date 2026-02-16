@@ -1,5 +1,3 @@
-loadstring(game:HttpGet("https://pastefy.app/bthqN3E4/raw"))()
-
 task.wait(0.1)
 -- ============================================================
 -- 22S DUELS - BLUE EDITION + FAST ESP
@@ -1321,7 +1319,7 @@ local titleLabel = Instance.new("TextLabel", header)
 titleLabel.Size = UDim2.new(1, 0, 0, 32 * guiScale)
 titleLabel.Position = UDim2.new(0, 0, 0, 10 * guiScale)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "22S DUELS"
+titleLabel.Text = "SCOOBY DUELS"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBlack
 titleLabel.TextSize = 28 * guiScale
@@ -1338,6 +1336,7 @@ subtitleLabel.Font = Enum.Font.GothamBold
 subtitleLabel.TextSize = 16 * guiScale
 subtitleLabel.TextXAlignment = Enum.TextXAlignment.Center
 subtitleLabel.ZIndex = 5
+subtitleLabel.TextTransparency = 1
 
 local closeBtn = Instance.new("TextButton", header)
 closeBtn.Size = UDim2.new(0, 36 * guiScale, 0, 36 * guiScale)
@@ -1905,5 +1904,3 @@ Player.CharacterAdded:Connect(function()
     if Enabled.Galaxy then setupGalaxyForce() adjustGalaxyJump() end
     if Enabled.SpamBat then stopSpamBat() task.wait(0.1) startSpamBat() end
     if Enabled.BatAimbot then stopBatAimbot() task.wait(0.1) startBatAimbot() end
-    if Enabled.Unwalk then startUnwalk() end
-end)
